@@ -1,0 +1,448 @@
+/*import*/ 
+
+DATA SALTSNCK_DRUG_1114_1165;
+INFILE "H:\project\saltsnck_drug_1114_1165" FIRSTOBS=2 MISSOVER DLM=' ';
+INPUT IRI_KEY WEEK SY GE VEND ITEM UNITS DOLLARS F $ D PR;
+VENDx=put(VEND,z5.);
+ITEMx=put(ITEM,z5.);
+RUN;
+
+DATA SALTSNCK_DRUG_1114_1165;
+SET SALTSNCK_DRUG_1114_1165;
+LENGTH COLUPC $14.;
+IF SY=0 THEN COLUPC=cat(GE,VENDx,ITEMx);
+ELSE COLUPC=cat(SY,GE,VENDx,ITEMx);
+COLUPC_1=input(COLUPC,14.);
+drop COLUPC;
+rename COLUPC_1=COLUPC;
+RUN;
+
+/*import*/ 
+DATA SALTSNCK_GROC_1114_1165; 
+INFILE "H:\project\saltsnck_groc_1114_1165" FIRSTOBS=2 MISSOVER DLM=' ';
+INPUT IRI_KEY WEEK SY GE VEND ITEM UNITS DOLLARS F $ D PR;
+VENDx=put(VEND,z5.);
+ITEMx=put(ITEM,z5.);
+RUN;
+
+DATA SALTSNCK_GROC_1114_1165;
+SET SALTSNCK_GROC_1114_1165;
+LENGTH COLUPC $14.;
+IF SY=0 THEN COLUPC = cat(GE,VENDx,ITEMx);
+ELSE COLUPC=cat(SY,GE,VENDx,ITEMx);
+COLUPC_1=input(COLUPC,14.);
+drop COLUPC;
+rename COLUPC_1=COLUPC;
+RUN;
+
+/*import*/ 
+PROC IMPORT DATAFILE='H:\project\ads_demo3.csv' out=DEMO dbms = csv replace;
+getnames = YES;
+run;
+
+data demo;
+set demo;
+rename Panelist_ID=panid;
+run;
+
+/*import*/
+data SALTSNCK_PANEL_GR_1114_1165;
+INFILE 'H:\project\saltsnck_PANEL_GR_1114_1165.dat' FIRSTOBS = 2 expandtabs;
+INPUT PANID WEEK UNITS OUTLET $ DOLLARS IRI_KEY COLUPC;
+COLUPC = put(COLUPC,$14.);
+RUN;
+
+/*import*/
+data SALTSNCK_PANEL_DR_1114_1165;
+INFILE 'H:\Project\saltsnck_PANEL_DR_1114_1165.dat' FIRSTOBS=2 expandtabs;
+INPUT PANID WEEK UNITS OUTLET $ DOLLARS IRI_KEY COLUPC;
+COLUPC = put(COLUPC,$14.);
+RUN;
+
+/*import*/ 
+PROC IMPORT DATAFILE='H:\project\prod_saltsnck.xls' out=PROD_SALTSNCK dbms=xls replace;
+getnames = YES;
+run;
+
+/*clean upc*/
+data prod_saltsnck;
+set prod_saltsnck;
+UPC=compress(UPC,'-');
+run;
+
+/*check dtype of colupc,sy,ge,vend,item*/
+proc contents data=prod_saltsnck;run;
+
+/*change dtype*/
+data prod_saltsnck;
+set prod_saltsnck;
+colupc=input(upc,15.);
+drop upc;
+run;
+
+/*change dtype*/
+data prod_saltsnck;
+set prod_saltsnck(rename=(sy=sy_old));
+sy=input(sy_old,12.);
+drop sy_old;
+run;
+
+/*change dtype*/
+data prod_saltsnck;
+set prod_saltsnck(rename=(ge=ge_old));
+ge=input(ge_old,12.);
+drop ge_old;
+run;
+
+/*change dtype*/
+data prod_saltsnck;
+set prod_saltsnck(rename=(vend=vend_old));
+vend=input(vend_old,12.);
+drop vend_old;
+run;
+
+/*change dtype*/
+data prod_saltsnck;
+set prod_saltsnck(rename=(item=item_old));
+item=input(item_old,12.);
+drop item_old;
+run;
+
+/*confirm dtype of colupc,sy,ge,vend,item*/
+proc contents data=prod_saltsnck;run;
+
+/*Sorting Datasets*/
+PROC SORT DATA=SALTSNCK_PANEL_GR_1114_1165 OUT=SALTSNCK_PANEL_GR_1114_1165;
+by PANID;
+run;
+
+PROC SORT DATA=SALTSNCK_PANEL_DR_1114_1165 OUT=SALTSNCK_PANEL_DR_1114_1165;
+by PANID;
+run;
+
+PROC SORT DATA=DEMO OUT=DEMO;
+by PANID;
+run;
+
+PROC SORT DATA=SALTSNCK_GROC_1114_1165 OUT=SALTSNCK_GROC_1114_1165;
+by COLUPC;
+run;
+
+PROC SORT DATA=SALTSNCK_DRUG_1114_1165 OUT=SALTSNCK_DRUG_1114_1165;
+by COLUPC;
+run;
+
+PROC SORT DATA=PROD_SALTSNCK OUT=PROD_SALTSNCK;
+by COLUPC;
+run;
+
+/*Merging all grocery related Datasets*/
+data COMBINED;
+merge SALTSNCK_PANEL_GR_1114_1165(in=a) DEMO(in=b);
+by PANID;
+if a and b;
+run;
+
+PROC SORT DATA=COMBINED;
+by COLUPC;
+run; 
+
+data COMBINED1;
+merge COMBINED(in=c1) SALTSNCK_GROC_1114_1165(in=c2);
+by COLUPC;
+if c1 and c2;
+run;
+
+data COMBINED1;
+SET COMBINED1;
+drop VENDx ITEMx;
+run;
+
+PROC SORT DATA=COMBINED1; 
+by COLUPC;
+run; 
+
+data COMBINED2;
+merge COMBINED1(in=c3) PROD_SALTSNCK(in=c4);
+by COLUPC;
+if c3 and c4;
+run; 
+
+/*Merging all drug related Datasets*/
+data COMBINED_DR;
+merge SALTSNCK_PANEL_DR_1114_1165(in=a) DEMO(in=b);
+by PANID;
+if a and b;
+run;
+
+PROC SORT DATA=COMBINED_DR;
+by COLUPC;
+run;
+
+data COMBINED1_DR;
+merge COMBINED_DR(in=c1) SALTSNCK_DRUG_1114_1165(in=c2);
+by COLUPC;
+if c1 and c2;
+run; 
+
+Data COMBINED1_DR;
+SET COMBINED1_DR;
+drop VENDx ITEMx;
+run;
+
+PROC SORT DATA=COMBINED1_DR;
+by COLUPC;
+run;
+
+data COMBINED2_DR;
+merge COMBINED1_DR (in=c3) PROD_SALTSNCK (in=c4);
+by COLUPC;
+if c3 and c4;
+run;
+
+/*Merging Drug and grocery datasets*/
+DATA FINAL_DATA;
+SET COMBINED2 COMBINED2_DR;
+run;
+
+/*check missing values in numerical variables*/
+proc means data=final_data NMISS N;run;
+
+/*check dtypes to recognize categorical variables*/
+proc contents data=final_data order=varnum;run;
+
+/*checking missing values in categorical variables*/
+proc freq data=final_data;
+tables outlet Combined_Pre_Tax_Income_of_HH Type_of_Residential_Possession COUNTY HH_AGE HH_EDU Male_Working_Hour_Code
+Female_Working_Hour_Code Marital_Status HH_Head_Race__RACE3_ l1 l2 l3 l4 l5 l9 product_type package flavor_scent fat_content
+cooking_method salt_sodium_content type_of_cut;
+run;
+
+/*drop columns with missing values*/
+data final_data;
+set final_data;
+drop Panelist_Type HH_RACE Male_Working_Hour_Code MALE_SMOKE FEM_SMOKE Language HISP_FLAG HISP_CAT HH_Head_Race__RACE2_
+Microwave_Owned_by_HH market_based_upon_zipcode l1 l2 l3 l4 l9 level _stubspec_1431rc fat_content cooking_method
+salt_sodium_content type_of_cut;
+run;
+
+/*fix numerical missing values*/
+proc stdize data=final_data out=final_data reponly method=median;
+var Number_of_TVs_Used_by_HH Number_of_TVs_Hooked_to_Cable;
+run;
+
+/*fix categorical missing values*/
+data final_data;
+set final_data;
+if Combined_Pre_Tax_Income_of_HH=0 then Combined_Pre_Tax_Income_of_HH=6;
+if Type_of_Residential_Possession=0 then Type_of_Residential_Possession=2;
+if HH_AGE=0 then HH_AGE=6;
+if HH_EDU=0 then HH_EDU=4;
+if Female_Working_Hour_Code=7 then Female_Working_Hour_Code=3;
+if Marital_Status=0 then Marital_Status=2;
+if HH_Head_Race__RACE3_=0 then HH_Head_Race__RACE3_=1;
+if product_type='MISSING' then product_type='POTATO CHIP';
+if flavor_scent='MISSING' then flavor_scent='ORIGINAL';
+run;
+
+/*check if missing values have been fixed*/
+proc means data=final_data NMISS N;run;
+
+/**/
+data final_data;
+set final_data;
+last_week='30DEC2001'D;
+format last_week DDMMYY10.;
+run;
+
+/*RFM*/
+proc sql;
+create table saltsnck_rfm as
+select panid, max(week) as last_purchase, min(1165-week) as recency, count(week) as frequency, avg(dollars) as monetary
+from final_data
+where l5 like '%RUFFLES%'
+group by panid
+having frequency>1;
+quit;
+
+/*check correlation*/
+proc corr data=saltsnck_rfm;
+var recency frequency monetary;
+run;
+
+/*export data*/
+proc export data=saltsnck_rfm outfile="saltsnck_rfm.csv" dbms=csv replace;run;
+
+/*import*/
+PROC IMPORT DATAFILE='H:\project\saltsnck_rfm.csv' out=saltsnck_rfm dbms=csv replace;
+getnames = YES;
+run;
+
+/**/
+proc means data=saltsnck_rfm min P20 P40 P60 P80 max;
+var recency frequency monetary;
+output out=saltsnck_cust_percentile MIN= P20= P40= P60= P80= MAX=/ AUTONAME;
+run;
+
+/*CREATING CUSTOMER SEGMENTS*/
+DATA saltsnck_rfm;
+SET saltsnck_rfm;
+FORMAT LAST_PURCHASE DDMMYY10.;
+ID=1;run;
+
+DATA saltsnck_cust_percentile;
+SET saltsnck_cust_percentile;
+ID = 1;
+RUN;
+
+PROC SQL;
+CREATE TABLE saltsnck_panel_with_segments AS
+SELECT * FROM
+(SELECT * FROM saltsnck_rfm) AS A
+LEFT JOIN
+(SELECT * FROM saltsnck_cust_percentile) AS B
+ON A.ID=B.ID;
+
+/* Creating Segments */
+
+DATA saltsnck_panel_with_segments_2 (KEEP=PANID MONETARY FREQUENCY RECENCY SEGMENT );
+SET saltsnck_panel_with_segments;
+IF (MONETARY > MONETARY_P80 & FREQUENCY > FREQUENCY_P80 & RECENCY < RECENCY_P20) THEN SEGMENT=1;
+ELSE IF (FREQUENCY > FREQUENCY_P80) THEN SEGMENT=2;
+ELSE IF (MONETARY > MONETARY_P80) THEN SEGMENT =3;
+ELSE IF (FREQUENCY > FREQUENCY_P80 & MONETARY < MONETARY_P20|MONETARY < MONETARY_P40) THEN SEGMENT =4;
+ELSE SEGMENT=0;
+RUN;
+
+PROC FREQ DATA=saltsnck_panel_with_segments_2;
+TABLES SEGMENT;
+RUN;
+PROC SQL;
+CREATE TABLE SEGMENT0 AS
+SELECT * FROM saltsnck_panel_with_segments_2 WHERE SEGMENT=0;
+QUIT;
+PROC SQL;
+CREATE TABLE SEGMENT1 AS
+SELECT * FROM saltsnck_panel_with_segments_2 WHERE SEGMENT=1;
+QUIT;
+
+PROC SQL;
+CREATE TABLE SEGMENT2 AS
+SELECT * FROM saltsnck_panel_with_segments_2 WHERE SEGMENT=2;
+QUIT;
+
+PROC SQL;
+CREATE TABLE SEGMENT3 AS
+SELECT * FROM saltsnck_panel_with_segments_2 WHERE SEGMENT=3;
+QUIT;
+
+PROC SQL;
+CREATE TABLE SEGMENT4 AS
+SELECT * FROM saltsnck_panel_with_segments_2 WHERE SEGMENT=4;
+QUIT;
+
+proc gchart data=saltsnck_panel_with_segments_2;
+pie segment;
+run;
+
+/*bg*/
+data saltsnck_rfm_new;
+set saltsnck_panel_with_segments;
+if recency <= recency_P20 then r_score=5;
+else if recency <= recency_P40 & recency > recency_p20 then r_score=4;
+else if recency <= recency_P60 & recency > recency_p40 then r_score=3;
+else if recency <= recency_P80 & recency > recency_p60 then r_score=2;
+else r_score=1;
+run;
+
+data saltsnck_rfm_new;
+set saltsnck_rfm_new;
+if frequency >= frequency_p80 then f_score=5;
+else if frequency >= frequency_p60 & frequency < frequency_p80 then f_score=4;
+else if frequency >= frequency_p40 & frequency < frequency_p60 then f_score=3;
+else if frequency >= frequency_p20 & frequency < frequency_p40 then f_score=2;
+else f_score=1;
+run;
+
+
+data saltsnck_rfm_new;
+set saltsnck_rfm_new;
+if monetary >= monetary_p80 then m_score=5;
+else if monetary >= monetary_p60 & monetary < monetary_p80 then m_score=4;
+else if monetary >= monetary_p40 & monetary < monetary_p60 then m_score=3;
+else if monetary >= monetary_p20 & monetary < monetary_p40 then m_score=2;
+else m_score=1;
+run;
+
+data saltsnck_rfm_new;
+set saltsnck_rfm_new;
+rfm_total = r_score + f_score + m_score;
+rfm_score = cat(r_score, f_score, m_score);
+run;
+
+proc sql;
+create table rfm_3 as
+select panid,recency,frequency,monetary
+from saltsnck_rfm_new;
+quit;
+
+proc sql;
+create table rfm_2 as
+select panid,r_score,f_score,m_score,rfm_total,rfm_score
+from saltsnck_rfm_new;
+quit;
+
+data saltsnck_rfm_new;
+set saltsnck_rfm_new;
+loyal=0;
+if rfm_total >= 12 & r_score >= 4 & f_score >= 4 & m_score >= 4 then loyal=1;
+run;
+
+proc sort data = saltsnck_rfm_new out=saltsnck_rfm_sort;
+by descending rfm_total;
+run;
+
+title1 'Proportion of Loyal Customers';
+proc freq data=saltsnck_rfm_sort;
+table loyal; run;
+
+proc gchart data=saltsnck_rfm_sort;
+pie loyal / percent = arrow
+midpoints = 1 0
+value=none
+noheading; 
+run;
+
+proc freq data=c1;
+table brand_name*frequency_score / out=trans11 (keep= brand_name frequency_score count) nopercent nocum;
+run;
+
+title1 'Break-down of Frequent Customers by Brand';
+proc sgplot data=trans11;
+   vbar brand_name / group=frequency_score response=count groupdisplay=cluster seglabel seglabelattrs=(size=8);
+   xaxis display=(nolabel noticks);
+   yaxis label='Count of number of Frequency Customers';
+   keylegend / title='Gender';
+run;
+
+proc freq data=c1;
+table brand_name*monetary_score / out=trans12 (keep= brand_name monetary_score count) nopercent nocum;
+run;
+
+title1 'Break-down of Money spending Customers by Brand';
+proc sgplot data=trans12;
+   vbar brand_name / group=monetary_score response=count groupdisplay=cluster seglabel seglabelattrs=(size=8);
+   xaxis display=(nolabel noticks);
+   yaxis label='Count of number of Monetary Customers';
+   keylegend / title='Gender';
+run;
+
+
+/*proc print data = c1 (obs = 30);
+where rfm_totalscore = 12; run;*/
+
+title1 'Number of Times an individual buy a particular brand';
+proc freq data=c1;
+tables panid*brand / nocol norow nopercent out=test2;
+run;
+
